@@ -1,0 +1,61 @@
+---
+title: "Untitled"
+author: "Satoshi"
+date: "November 29, 2018"
+output: html_document
+---
+
+```{r}
+library(leaflet)
+library(dplyr)
+```
+
+
+```{r}
+dat_station<- read.csv("Hubway_Stations_as_of_July_2017.csv")
+dat_201809<-read.csv("201809-bluebikes-tripdata.csv")
+```
+# Blue bike Stations
+# Number of users at each station
+```{r}
+# Create data frame
+dat_201809_station<- dat_201809%>% 
+  group_by(start.station.id)%>% summarize(number=n(), start.station.latitude=first(start.station.latitude), start.station.longitude=first(start.station.longitude),start.station.name=first(start.station.name))
+```
+# Map about number of users at each station 
+```{r}
+# Distinguish stations by color based on the number of users
+getColor <- function(df) {
+  sapply(df$number, function(number) {
+  if(number %in% 1:500) {
+    "green"
+  } else if(number %in% 501:2000) {
+    "orange"
+  } else if(number >2000) {
+    "red"
+  } else {
+    "blue"
+  } })
+}
+
+icons <- awesomeIcons(
+  icon = 'ios-close',
+  iconColor = 'black',
+  library = 'ion',
+  markerColor = getColor(dat_201809_station)
+)
+
+leaflet(dat_201809_station) %>% addTiles() %>%
+  addAwesomeMarkers(~start.station.longitude
+, ~start.station.latitude, icon=icons, label=~as.character(number), popup = ~start.station.name)
+```
+
+
+
+
+
+
+
+
+
+
