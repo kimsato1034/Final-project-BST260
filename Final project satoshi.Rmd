@@ -121,6 +121,13 @@ dat_2017_1%>% ggplot(aes(Month))+
 ```
 They tend to avoid using Bluebike in Winter. 
 
+# How much are they making??
+```{r}
+dat_2017_1%>%group_by(bikeid)%>%summarize(count=n())%>%
+  mutate(income=200*count)
+```
+
+
 
 # Blue bike Stations
 # Number of users at each station
@@ -188,7 +195,7 @@ confusionMatrix(tab_1)
 
 
 
-
+# Unnecessary
 ```{r,eval=FALSE}
 # Duration
 dat_201809_1 %>% group_by(age_cat) %>% summarize(average = mean(duration_min), se=sd(duration_min)/sqrt(n())) %>% 
