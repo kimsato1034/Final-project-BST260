@@ -98,23 +98,30 @@ dat_2017_1%>%group_by(bikeid)%>%summarize(count=n())%>%
 ```
 
 
+
+
+
+
 # Blue bike Stations
-# Number of users at each station
 ```{r}
 # Create data frame
-dat_201809_station<- dat_201809%>% 
-  group_by(start.station.id)%>% summarize(number=n(), start.station.latitude=first(start.station.latitude), start.station.longitude=first(start.station.longitude),start.station.name=first(start.station.name))
+dat_station<- read.csv("Hubway_Stations_as_of_July_2017.csv")
+dat_2017_station<- dat_2017_1%>% 
+  group_by(start.station.id)%>% summarize(number=n(), start.station.latitude=first(start.station.latitude), start.station.longitude=first(start.station.longitude),start.station.name=first(start.station.name))%>% filter(start.station.latitude>0)
+summary(dat_2017_station)
 ```
+
+
 # Map about number of users at each station 
 ```{r}
 # Distinguish stations by color based on the number of users
 getColor <- function(df) {
   sapply(df$number, function(number) {
-  if(number %in% 1:500) {
+  if(number %in% 1:4000) {
     "green"
-  } else if(number %in% 501:2000) {
+  } else if(number %in% 4001:10000) {
     "orange"
-  } else if(number >2000) {
+  } else if(number >10000) {
     "red"
   } else {
     "blue"
@@ -125,13 +132,26 @@ icons <- awesomeIcons(
   icon = 'ios-close',
   iconColor = 'black',
   library = 'ion',
-  markerColor = getColor(dat_201809_station)
+  markerColor = getColor(dat_2017_station)
 )
 
-leaflet(dat_201809_station) %>% addTiles() %>%
+leaflet(dat_2017_station) %>% addTiles() %>%
   addAwesomeMarkers(~start.station.longitude
 , ~start.station.latitude, icon=icons, label=~as.character(number), popup = ~start.station.name)
 ```
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 # Machine learning: k nearest neighbors
@@ -161,9 +181,6 @@ The accuracy for the test set is 0.9943, which is pretty high. But...
 # Unnecessary
 Here, we only focused on September 2018.
 ```{r,eval=FALSE}
-dat_station<- read.csv("Hubway_Stations_as_of_July_2017.csv")
-dat_201809<-read.csv("201809-bluebikes-tripdata.csv")
-
 dat_201809_1<- dat_201809%>% mutate(age=2018-birth.year, gender=as.factor(gender))%>% filter(age<115)%>%
   mutate(age_cat=case_when(
     .$age>=10 & .$age<20 ~1,
@@ -259,4 +276,40 @@ knn_fit_1<-knn3(gender~.,data=select(AA_1, gender, tripduration, start.station.i
 f_hat_1 <- predict(knn_fit_1, newdata = BB_1)[,2]
 tab_1 <- table(pred=round(f_hat_1), truth=BB_1$gender)
 confusionMatrix(tab_1)
+```
+
+# Number of users at each station in Sep 2018
+```{r,eval=FALSE}
+# Create data frame
+dat_station<- read.csv("Hubway_Stations_as_of_July_2017.csv")
+dat_201809<-read.csv("201809-bluebikes-tripdata.csv")
+dat_201809_station<- dat_201809%>% 
+  group_by(start.station.id)%>% summarize(number=n(), start.station.latitude=first(start.station.latitude), start.station.longitude=first(start.station.longitude),start.station.name=first(start.station.name))
+```
+# Map about number of users at each station 
+```{r,eval=FALSE}
+# Distinguish stations by color based on the number of users
+getColor <- function(df) {
+  sapply(df$number, function(number) {
+  if(number %in% 1:500) {
+    "green"
+  } else if(number %in% 501:2000) {
+    "orange"
+  } else if(number >2000) {
+    "red"
+  } else {
+    "blue"
+  } })
+}
+
+icons <- awesomeIcons(
+  icon = 'ios-close',
+  iconColor = 'black',
+  library = 'ion',
+  markerColor = getColor(dat_201809_station)
+)
+
+leaflet(dat_201809_station) %>% addTiles() %>%
+  addAwesomeMarkers(~start.station.longitude
+, ~start.station.latitude, icon=icons, label=~as.character(number), popup = ~start.station.name)
 ```
