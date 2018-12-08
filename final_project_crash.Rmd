@@ -12,7 +12,7 @@ library(ggplot2)
 
 We are going to use `crash` data in Boston from Jan 1, 2015 to Sep 30, 2018. 
 
-```{r}
+```{r, message = FALSE}
 crash <- read_csv("crash_sept.csv")
 ```
 
@@ -48,9 +48,27 @@ temp %>%
   geom_density(fill="#0099FF")
 ```
 
+```{r}
+temp %>%
+  filter(mode_type == "bike" & year != 2018) %>%
+  group_by(month) %>%
+  ggplot(aes(hour)) +
+  geom_density(fill = "#0099FF") +
+  facet_wrap(~ month)
+```
+
+
+```{r}
+temp %>%
+  filter(mode_type == "bike" & year != 2018) %>%
+  group_by(wday) %>%
+  ggplot(aes(hour)) +
+  geom_density(fill = "#0099FF") +
+  facet_wrap(~ wday)
+```
 
 
 
-
+[link]("https://www.boston.com/news/local-news/2014/06/19/cyclists-beware-this-new-map-shows-bike-crash-hotspots-across-boston")
 
 
