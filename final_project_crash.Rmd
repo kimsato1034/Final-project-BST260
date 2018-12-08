@@ -1,0 +1,56 @@
+---
+title: "Final_project_crash"
+output: html_document
+---
+
+```{r, message = FALSE, warning = FALSE}
+library(readr)
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+```
+
+We are going to use `crash` data in Boston from Jan 1, 2015 to Sep 30, 2018. 
+
+```{r}
+crash <- read_csv("crash_sept.csv")
+```
+
+
+```{r}
+temp <- crash %>%
+  mutate(year = year(dispatch_ts), month = month(dispatch_ts, label = TRUE), day = day(dispatch_ts),
+         wday = wday(dispatch_ts, label = TRUE), hour = hour(dispatch_ts))
+```
+
+### Total number of crashes in each month from 2015 to 2017
+```{r}
+temp %>%
+  filter(year != 2018) %>%
+  mutate(mode_type = as.factor(mode_type)) %>%
+  group_by(mode_type) %>%
+  ggplot() +
+  geom_bar(aes(month))
+```
+
+### Number of `bike` crashes by month (2015-2017)
+```{r}
+temp %>%
+  filter(mode_type == "bike" & year != 2018) %>%
+  ggplot() +
+  geom_histogram(aes(month), stat ="count")
+```
+
+```{r}
+temp %>%
+  filter(mode_type == "bike" & year != 2018) %>%
+  ggplot(aes(hour)) +
+  geom_density(fill="#0099FF")
+```
+
+
+
+
+
+
+
