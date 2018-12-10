@@ -23,6 +23,105 @@ temp <- crash %>%
          wday = wday(dispatch_ts, label = TRUE), hour = hour(dispatch_ts))
 ```
 
+
+#### Creating a new column indicating bike accidents
+```{r}
+temp <- temp %>%
+  mutate(mode_type = as.factor(mode_type)) %>%
+  mutate( accid = ifelse(mode_type == "bike", "1","0"))
+```
+
+```{r}
+### cross validation methods for reference
+
+library(caret)
+
+library(mlbench)
+data(crash)
+
+set.seed(1)
+splits <- createFolds(Sonar$Class, returnTrain = TRUE)
+    results <- lapply(splits, 
+                      function(x, dat) {
+                        holdout <- (1:nrow(dat))[-unique(x)]
+                        data.frame(index = holdout, 
+                                   obs = dat$Class[holdout])
+                  },
+                  dat = Sonar)
+mods <- vector(mode = "list", length = length(splits))
+
+## foreach or lapply would do this faster
+for(i in seq(along = splits)) {
+  in_train <- unique(splits[[i]])
+  set.seed(2)
+  mod <- train(Class ~ ., data = Sonar[in_train, ],
+               method = "svmRadial",
+               preProc = c("center", "scale"),
+               tuneLength = 8)
+  results[[i]]$pred <- predict(mod, Sonar[-in_train, ])
+  mods[[i]] <- mod
+}
+
+lapply(results, defaultSummary)
+
+
+
+```
+
+
+
+#### Perform logistic regression 
+```{r}
+glm_fit1 <- temp %>% 
+  mutate(accid = as.numeric(accid), month = as.factor(month)) %>%
+  group_by(wday) %>%
+  glm( accid ~ wday, data=., family = "binomial")
+
+factor(temp$wday)
+#Levels: Sun < Mon < Tue < Wed < Thu < Fri < Sat
+
+glm_fit1
+
+#wday.L = Sunday 
+#wday.Q = Monday 
+#wday.C = Tuesday 
+#wday^4 = Wednesday 
+#wday^5 = Thursday 
+#wday^6 = Friday 
+#Intercept = Saturday 
+
+```
+
+
+```{r}
+
+glm_fit2 <- temp %>% 
+  mutate(accid = as.numeric(accid), month = as.factor(month)) %>%
+  group_by(month) %>%
+  glm( accid ~ month, data=., family = "binomial")
+
+#By factor(temp$month)
+# Levels: Jan < Feb < Mar < Apr < May < Jun < Jul < Aug < Sep < Oct < Nov < Dec
+
+glm_fit2
+
+```
+
+
+```{r}
+#make a graph
+
+temp %>% 
+  mutate(accid = as.numeric(accid), month = as.factor(month)) %>%
+  group_by(month) %>%
+  summarize(prob = mean(accid))
+
+```
+
+
+
+
+
 ### Total number of crashes in each month from 2015 to 2017
 ```{r}
 temp %>%
