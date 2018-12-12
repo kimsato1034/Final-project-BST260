@@ -31,46 +31,41 @@ temp <- temp %>%
   mutate( accid = ifelse(mode_type == "bike", "1","0"))
 ```
 
-```{r}
-### cross validation methods for reference
+
+### cross validation to have training, testing and holdout sets 
+#```{r}
 
 library(caret)
 
 library(mlbench)
-data(crash)
+data(temp)
 
 set.seed(1)
-splits <- createFolds(Sonar$Class, returnTrain = TRUE)
-    results <- lapply(splits, 
-                      function(x, dat) {
-                        holdout <- (1:nrow(dat))[-unique(x)]
-                        data.frame(index = holdout, 
-                                   obs = dat$Class[holdout])
-                  },
-                  dat = Sonar)
-mods <- vector(mode = "list", length = length(splits))
+ 
+require(caret)
+ 
+classes <- temp[, "accid"]
 
-## foreach or lapply would do this faster
-for(i in seq(along = splits)) {
-  in_train <- unique(splits[[i]])
-  set.seed(2)
-  mod <- train(Class ~ ., data = Sonar[in_train, ],
-               method = "svmRadial",
-               preProc = c("center", "scale"),
-               tuneLength = 8)
-  results[[i]]$pred <- predict(mod, Sonar[-in_train, ])
-  mods[[i]] <- mod
-}
-
-lapply(results, defaultSummary)
-
+predictors <- temp[, -match(c("year", "month", "day", "wday", "hour"), colnames(temp))]
+train_set <- createDataPartition(classes, p = 0.8, list = TRUE)  #80 percentage of data goes on training set 
+#classes need to have 2 data points 
+str(train_set) 
+ 
+train_predictors <- predictors[train_set, ]
+train_classes <- classes[train_set]
+test_predictors <- predictors[-train_set, ]
+test_classes <- classes[-train_set]
+ 
+set.seed(seed)
+cv_splits <- createFolds(classes, k = 10, returnTrain = TRUE)
+str(cv_splits)
 
 
 ```
 
 
 
-#### Perform logistic regression 
+#### Supervised Learning : Perform logistic regression 1
 ```{r}
 glm_fit1 <- temp %>% 
   mutate(accid = as.numeric(accid), month = as.factor(month)) %>%
@@ -92,6 +87,7 @@ glm_fit1
 
 ```
 
+#### Perform logistic regression 2 
 
 ```{r}
 
@@ -107,14 +103,64 @@ glm_fit2
 
 ```
 
+#### make a graph
 
 ```{r}
-#make a graph
 
 temp %>% 
   mutate(accid = as.numeric(accid), month = as.factor(month)) %>%
   group_by(month) %>%
   summarize(prob = mean(accid))
+
+```
+
+#### Maximum likeliehood estimate
+
+```{r}
+
+
+```
+
+#### log loss 
+```{r}
+
+
+
+```
+
+#### Regularization - Lasso 
+
+```{r}
+
+
+
+```
+
+
+#### Regularization - Ridge 
+
+```{r}
+
+
+
+```
+
+
+#### log loss
+
+```{r}
+
+
+
+```
+
+
+#### ROC curve 
+```{r}
+
+
+
+
 
 ```
 
@@ -166,7 +212,17 @@ temp %>%
   facet_wrap(~ wday)
 ```
 
+```{r}
+library(tidyverse)
+library(ggmap)
+library(mapview)
 
+
+
+
+
+
+```
 
 [link]("https://www.boston.com/news/local-news/2014/06/19/cyclists-beware-this-new-map-shows-bike-crash-hotspots-across-boston")
 
