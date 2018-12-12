@@ -229,8 +229,6 @@ model <- temp1 %>%
 summary(model)
 ```
 
-?? Why there is NAs?? It would be cool to use "facet_grid( facets=.~ weekend) " under ggplot and to show how it differ by weekday/weekend, or by season. 
-
 
 ### SEASON
 ```{r}
