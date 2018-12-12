@@ -1,6 +1,6 @@
 ---
 title: "BST260 Final Project: Bluebike Data Visualization and Analysis - draft"
-author: "Satoshi, Nora, Adam, Jiyoon"
+author: "Satoshi, Nuoya (Nora), Adam, Jiyoon"
 date: "December 10, 2018"
 output: html_document
 ---
@@ -66,8 +66,8 @@ dat_2017_1%>% ggplot(aes(hour))+
   xlab("Hour")+
   ylab("Number of Users")
 ```
-Many people uses rush hours (around 8am and 5pm).
 
+#### The graph shows that the peak time for bike users in 2017 was during the rush hours (from 7am - 9am and from 4pm to 6pm)
 
 ```{r}
 # Number of users in each month in 2017
@@ -77,7 +77,8 @@ dat_2017_1%>% ggplot(aes(Month))+
   xlab("Month")+
   ylab("Number of users")
 ```
-They tend to avoid using Bluebike in Winter. 
+
+#### The number of blukebike users decreased dramatically from January to March, as a proof of Boston Winter. 
 
 ```{r}
 # Distance
@@ -90,18 +91,18 @@ dat_2017_1 %>% group_by(age_cat) %>% summarize(average = mean(dist_km), se=sd(di
   xlab(expression(paste(Age, " (years)")))+
   ylab(expression(paste(Distance," (km)")))
 ```
-There is no consistent trend between age and trip distance.
+
+#### There is no consistent trend between age and trip distance.
 
 
 # How much are they making??
 ```{r}
 dat_2017_1%>%group_by(bikeid)%>%summarize(count=n())%>%
-  mutate(income=200*count)
+  mutate(income=200*count) %>%
+  summary(income)
 ```
 
-
-
-
+#### The median income for bikers are 128,600 USD.
 
 
 # Blue bike Stations
@@ -141,6 +142,9 @@ leaflet(dat_2017_station) %>% addTiles() %>%
   addAwesomeMarkers(~start.station.longitude
 , ~start.station.latitude, icon=icons, label=~as.character(number), popup = ~start.station.name)
 ```
+
+#### Bluebikes are most used in downtown Boston and Cambridge area. 
+
 
 # Part 2: regression
 
@@ -206,6 +210,8 @@ temp <- dat_2017_1 %>%
          )
 temp %>% lm(dist_km ~ age + factor(gender) + hour_cat, data = .) %>% summary()
 ```
+#### The relationship between times of the day and biking distance is not statistically significant. 
+
 
 ### WEEKENDS
 ```{r}
@@ -222,6 +228,9 @@ model <- temp1 %>%
   lm(dist_km ~ age + factor(gender) + hour_cat + weekend, data = . )
 summary(model)
 ```
+
+?? Why there is NAs?? It would be cool to use "facet_grid( facets=.~ weekend) " under ggplot and to show how it differ by weekday/weekend, or by season. 
+
 
 ### SEASON
 ```{r}
