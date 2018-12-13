@@ -1,13 +1,13 @@
 ---
-title: "BST260 Final Project: Bluebike Data Visualization and Analysis - draft"
-author: "Satoshi, Nuoya (Nora), Adam, Jiyoon"
-date: "December 10, 2018"
+title: "BST260 Final Project: Bluebike and Crash- draft"
+author: "Satoshi, Nora, Adam, Jiyoon"
+date: "December 18, 2018"
 output: html_document
 ---
 
 ```{r, message = FALSE, warning = FALSE}
-library(leaflet)
 library(dplyr)
+library(leaflet)
 library(geosphere)
 library(data.table)
 library(ggplot2)
@@ -15,7 +15,7 @@ library(lubridate)
 library(caret)
 ```
 
-# Part 1: Data wrangling
+# Part 1: Data visualization
 
 We used all of the data in 2017
 # Comparing within 2017
@@ -66,8 +66,8 @@ dat_2017_1%>% ggplot(aes(hour))+
   xlab("Hour")+
   ylab("Number of Users")
 ```
+Many people uses rush hours (around 8am and 5pm).
 
-#### The graph shows that the peak time for bike users in 2017 was during the rush hours (from 7am - 9am and from 4pm to 6pm)
 
 ```{r}
 # Number of users in each month in 2017
@@ -77,8 +77,7 @@ dat_2017_1%>% ggplot(aes(Month))+
   xlab("Month")+
   ylab("Number of users")
 ```
-
-#### The number of blukebike users decreased dramatically from January to March, as a proof of Boston Winter. 
+They tend to avoid using Bluebike in Winter. 
 
 ```{r}
 # Distance
@@ -91,19 +90,7 @@ dat_2017_1 %>% group_by(age_cat) %>% summarize(average = mean(dist_km), se=sd(di
   xlab(expression(paste(Age, " (years)")))+
   ylab(expression(paste(Distance," (km)")))
 ```
-
-#### There is no consistent trend between age and trip distance.
-
-
-# How much are they making??
-```{r}
-dat_2017_1%>%group_by(bikeid)%>%summarize(count=n())%>%
-  mutate(income=200*count) %>%
-  summary(income)
-```
-
-#### The median income for bikers are 128,600 USD.
-
+There is no consistent trend between age and trip distance.
 
 # Blue bike Stations
 ```{r}
@@ -143,123 +130,153 @@ leaflet(dat_2017_station) %>% addTiles() %>%
 , ~start.station.latitude, icon=icons, label=~as.character(number), popup = ~start.station.name)
 ```
 
-#### Bluebikes are most used in downtown Boston and Cambridge area. 
-
-
-# Part 2: regression
-
-by using 2017 data,
+### association between number of bluebike users and bike crash
 
 ```{r}
-# Distance
-dat_2017_1 %>% 
-  group_by(age_cat) %>%
-  summarize(average = mean(dist_km), se = sd(dist_km) / sqrt(n())) %>% 
-  ggplot(aes(age_cat, average)) + 
-  geom_errorbar(aes(ymin = average - 2*se, ymax = average+2*se), width = 0.25)+
-  geom_point()+
-  geom_line()+
-  scale_x_continuous(breaks=(c(1,2,3,4,5,6,7,8)),
-                     labels=c("10s","20s","30s","40s","50s","60s","70s","80s+"))+
-  xlab(expression(paste(Age, " (years)")))+
-  ylab(expression(paste(Distance," (km)")))
-```
-
-It seems that the 30s tend to ride a bike far compared to the 20s on average. In order to assess the association between age and distance they use, we draw a plot.
-
-```{r}
-model <- dat_2017_1 %>%
-  lm(dist_km ~ age, data = .)
-summary(model)
+crash <- read.csv("crash_sept.csv")
 ```
 
 ```{r}
-model <- dat_2017_1 %>%
-  lm(dist_km ~ factor(age_cat, levels = c(2, 1, 3, 4, 5, 6, 7, 8)), data = .)
-summary(model)
-```
-
-### age & gender
-
-```{r}
-dat_2017_1 %>%
-  filter(gender != 0) %>%
-  filter(duration_min <= 45, dist_km <= 10) %>%
-  mutate(gender = as.factor(gender)) %>%
-  group_by(gender) %>%
-  mutate(avg = mean(dist_km), se = sd(dist_km) / sqrt(n())) %>%
-  ggplot(aes(gender, dist_km)) +
-  geom_boxplot(aes(lower = avg - 2 * se, upper = avg + 2 * se, fill = gender))
+crash_join <- crash %>%
+  filter(mode_type == "bike") %>%
+  mutate(month = month(dispatch_ts), year = year(dispatch_ts)) %>%
+  filter(year == 2017) %>%
+  group_by(month) %>%
+  summarise(crash = n())
 ```
 
 ```{r}
-model <- dat_2017_1 %>%
-  filter(duration_min <= 45, dist_km <= 10) %>%
-  lm(dist_km ~ age + factor(gender), data = .)
-summary(model)
-```
-
-### morning, afternoon, evening and night..
-```{r}
-temp <- dat_2017_1 %>%
-  mutate(hour_cat = case_when(
-           .$hour >= 6 & .$hour <= 11 ~ "morning",
-           .$hour >= 12 & .$hour <= 17 ~ "afternoon",
-           .$hour >= 18 & .$hour <= 23 ~ "evening",
-           .$hour >= 0 & .$hour <= 5 ~ "night")
-         )
-temp %>% lm(dist_km ~ age + factor(gender) + hour_cat, data = .) %>% summary()
-```
-#### The relationship between times of the day and biking distance is not statistically significant. 
-
-
-### WEEKENDS
-```{r}
-temp1 <- temp %>%
-  mutate(wday = wday(starttime, label = TRUE)) %>%
-  mutate(weekend = case_when(
-    wday == c("Mon", "Tue", "Wed", "Thu", "Fri") ~ "weekdays",
-    wday == c("Sat", "Sun") ~ "weekends")
-  )
-
-
-model <- temp1 %>%
-  filter(duration_min <= 45, dist_km <= 10) %>%
-  lm(dist_km ~ age + factor(gender) + hour_cat + weekend, data = . )
-summary(model)
-```
-
-
-### SEASON
-```{r}
-temp2 <- temp1 %>%
-  mutate(season = case_when(
-    Month == c(3, 4, 5) ~ "spring",
-    Month == c(6, 7, 8) ~ "summer",
-    Month == c(9, 10, 11) ~ "fall",
-    Month == c(12, 1, 2) ~ "winter"
-  ))
-
-model <- temp2 %>%
-  filter(duration_min <= 45, dist_km <= 10) %>%
-  lm(dist_km ~ age + factor(gender) + hour_cat + weekend + season, data = . )
-summary(model)
-```
-
-### station
-```{r}
-temp3 <- temp2 %>%
-  group_by(start.station.id) %>%
+temp <- dat_2017 %>%
+  mutate(month = month(starttime)) %>%
+  group_by(month) %>%
   summarise(users = n())
-temp4 <- left_join(temp2, temp3, by = "start.station.id")
 ```
 
 ```{r}
-model <- temp4 %>%
-  filter(duration_min <= 45, dist_km <= 10) %>%
-  lm(dist_km*1000 ~ age + factor(gender) + hour_cat + weekend + season + users,
-     data = . )
-summary(model)
+plot <- left_join(crash_join, temp)
+plot %>%
+  ggplot(aes(crash, users)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+```
 
+```{r}
+plot %>%
+  lm(crash ~ users, data = .) %>%
+  summary()
+```
+
+```{r}
+temp_join <- data.frame(month = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12), 
+                        temp = c(35, 37, 34, 52, 57, 70, 73, 72, 67, 62, 44, 31))
+reg <-left_join(plot, temp_join)
+```
+
+```{r}
+reg %>%
+  ggplot(aes(temp, users)) +
+  geom_point() +
+  geom_smooth(method = "lm", color = "orange")
+```
+
+```{r}
+reg %>%
+  lm(crash ~ users + temp, data = .) %>%
+  summary()
+```
+
+```{r}
+setDT(dat_2017)[ , dist_km := distGeo(matrix(c(start.station.longitude, start.station.latitude), ncol = 2),matrix(c(end.station.longitude, end.station.latitude), ncol = 2))/1000]
+ttt <- as.data.frame(dat_2017)
+
+avgdist <- ttt %>%
+  mutate(month = month(starttime)) %>%
+  group_by(month) %>%
+  summarise(avg_dis = sum(dist_km) / n())
+
+reg <- left_join(reg, avgdist)
+```
+
+```{r}
+reg %>%
+  lm(crash ~ users + temp, data = .) %>%
+  summary()
+```
+
+### precipitation
+```{r}
+precip_join <- data.frame(month = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12), 
+                        precip = c(3.5, 2.36, 4.19, 5.73, 3.45, 4.85, 4.02, 1.58,
+                                 3.73, 4.14, 1.8, 2.47))
+reg <-left_join(reg, precip_join)
+```
+```{r}
+reg %>%
+  ggplot(aes(precip, crash)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+```
+
+```{r}
+reg %>%
+  lm(crash ~ users + precip, data = .) %>%
+  summary()
+```
+
+
+# Daily prediction
+
+```{r}
+library(readxl)
+library(tidyverse)
+```
+
+```{r}
+weather <- read_excel("boston_weather.xls")
+
+weather$date <- paste(weather$year, weather$month, weather$day, sep="-") %>% ymd() %>% as.Date()
+
+weather <- weather %>% mutate(rain1 = ifelse(rain == "0", 0, 1))
+```
+
+### combine
+```{r}
+crash_day <- crash %>%
+  mutate(year = year(dispatch_ts), month = month(dispatch_ts), 
+         day = day(dispatch_ts)) %>%
+  filter(year == 2017) %>%
+  group_by(year, month, day) %>%
+  summarise(crash = n())
+
+crash_day$date <- paste(crash_day$year, crash_day$month, crash_day$day, sep="-") %>% ymd() %>% as.Date()
+```
+
+```{r}
+temp <- weather %>%
+  select(temp_max, temp_min, rain, rain1, snownice, date)
+crash_weather <- left_join(crash_day, temp, by = "date")
+```
+
+```{r}
+crash_weather %>%
+  ggplot(aes(rain1, crash)) +
+  geom_point()
+```
+
+```{r}
+temp <- dat_2017 %>%
+  mutate(year = year(starttime), month = month(starttime), day = day(starttime)) %>%
+  group_by(year, month, day) %>%
+  summarise(users = n())
+
+temp$date <- paste(temp$year, temp$month, temp$day, sep="-") %>% ymd() %>% as.Date()
+
+c_w_b <- left_join(crash_weather, temp)
+```
+
+### linear regression
+```{r}
+c_w_b %>% lm(crash ~ users + factor(rain1), data = .) %>%
+  summary()
 ```
 
