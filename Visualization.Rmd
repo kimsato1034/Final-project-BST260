@@ -1,0 +1,244 @@
+---
+title: "Data Preparation"
+author: "Satoshi, Nora, Adam, Jiyoon"
+date: "December 13, 2018"
+output: html_document
+---
+
+```{r, message = FALSE, warning = FALSE}
+library(dplyr)
+library(leaflet)
+library(geosphere)
+library(data.table)
+library(ggplot2)
+library(lubridate)
+library(caret)
+library(readxl)
+library(tidyverse)
+library(ggthemes)
+library(ggrepel)
+library(reshape)
+library(reshape2)
+library(devtools)
+```
+
+# Part 1: Data preparation
+
+We used all of the bluebike data in 2017 
+
+## Read the bluebike data in 2017
+```{r}
+# Importing the all monthly data in 2017
+dat_201701<-read.csv("201701-hubway-tripdata.csv",stringsAsFactors = FALSE)
+dat_201702<-read.csv("201702-hubway-tripdata.csv",stringsAsFactors = FALSE)
+dat_201703<-read.csv("201703-hubway-tripdata.csv",stringsAsFactors = FALSE)
+dat_201704<-read.csv("201704-hubway-tripdata.csv",stringsAsFactors = FALSE)
+dat_201705<-read.csv("201705-hubway-tripdata.csv",stringsAsFactors = FALSE)
+dat_201706<-read.csv("201706-hubway-tripdata.csv",stringsAsFactors = FALSE)
+dat_201707<-read.csv("201707-hubway-tripdata.csv",stringsAsFactors = FALSE)
+dat_201708<-read.csv("201708-hubway-tripdata.csv",stringsAsFactors = FALSE)
+dat_201709<-read.csv("201709-hubway-tripdata.csv",stringsAsFactors = FALSE)
+dat_201710<-read.csv("201710-hubway-tripdata.csv",stringsAsFactors = FALSE)
+dat_201711<-read.csv("201711-hubway-tripdata.csv",stringsAsFactors = FALSE)
+dat_201712<-read.csv("201712-hubway-tripdata.csv",stringsAsFactors = FALSE)
+
+# Combine them
+dat_2017 <- rbind(dat_201701, dat_201702, dat_201703, dat_201704, dat_201705,
+                  dat_201706, dat_201707, dat_201708, dat_201709, dat_201710,
+                  dat_201711, dat_201712)
+```
+
+## Add variables
+
+### 1. age, age_cat, duration_min, year, month, month_abb, day, hour, wday, weekend
+```{r}
+bbike <- dat_2017 %>%
+  mutate(birth.year = as.numeric(birth.year)) %>%
+  mutate(age = 2017 - birth.year) %>%
+  mutate(age_cat = case_when(
+    .$age >= 10 & .$age < 20 ~ 1,
+    .$age >= 20 & .$age < 30 ~ 2,
+    .$age >= 30 & .$age < 40 ~ 3,
+    .$age >= 40 & .$age < 50 ~ 4,
+    .$age >= 50 & .$age < 60 ~ 5,
+    .$age >= 60 & .$age < 70 ~ 6,
+    .$age >= 70 & .$age < 80 ~ 7,
+    .$age >= 80 ~ 8)) %>%
+  mutate(duration_min = tripduration / 60) %>%
+  mutate(year = year(starttime), 
+         month = month(starttime),
+         month_abb = month(starttime, label = TRUE, abbr = TRUE), 
+         day = day(starttime),
+         hour = hour(starttime), 
+         wday = wday(starttime, label = TRUE, abbr = TRUE))
+```
+
+### 2. dist_km
+```{r}
+setDT(bbike)[ , dist_km := distGeo(matrix(c(start.station.longitude, start.station.latitude), ncol = 2),matrix(c(end.station.longitude, end.station.latitude), ncol = 2))/1000]
+bbike <- as.data.frame(bbike)
+```
+
+### 3. overtime (if duration_min >  45, 1, 0)
+```{r}
+bbike <- bbike %>%
+  mutate(overtime = ifelse(duration_min > 45, "1", "0"))
+```
+
+### 4. user_start, user_end: number of users at the start/end station
+```{r}
+bbike <- bbike %>%
+  group_by(start.station.id) %>%
+  mutate(user_start = n())
+
+bbike <- bbike %>%
+  group_by(end.station.id) %>%
+  mutate(user_end = n())
+```
+
+## Combine weather information: temp_max, temp_min, rain, snownice(snow or ice)
+```{r}
+weather <- read_excel("boston_weather.xls")
+```
+
+```{r}
+bbike <- bbike %>%
+  group_by(year, month, day) %>%
+  left_join(., weather, by = c("year", "month", "day")) 
+```
+
+## Combine crash information daily
+```{r}
+crash <- read.csv("crash_sept.csv", stringsAsFactors = FALSE)
+crash <- crash %>%
+  mutate(year = year(dispatch_ts), month = month(dispatch_ts), day = day(dispatch_ts))
+```
+
+```{r}
+temp <- crash %>%
+  filter(year == 2017) %>%
+  group_by(year, month, day, mode_type) %>%
+  summarise(crash = n())
+crash_wide <- temp %>%
+  spread(mode_type, crash)
+```
+
+```{r}
+bbike_crash <- left_join(bbike, crash_wide, by = c("year", "month", "day"))
+```
+
+
+
+
+
+
+# Motivation
+
+The number of bluelike users has increased over several years. Among subscribers, if they pay $99 per year, they can use it unlimitedly. However, there is a time limit, for 45 minutes per once. We are going to figure out when they do not return their bike within 45 minutes and predict the pattern.
+
+Membership and Ridership
+*More than 8 million trips have been taken by Bluebikes riders since the 2011 launch (as of 12/2018)
+*An estimated 87,000 unique riders took trips in 2016
+
+```{r,echo=FALSE, fig.width = 0.5, fig.height = 0.3}
+knitr::include_graphics("https://d21xlh2maitm24.cloudfront.net/bos/Screen-Shot-2018-11-19-at-2.35.58-PM.png?mtime=20181119143621")
+```
+
+```{r}
+bbike_summary <- read_excel("bluebike_summary.xlsx")
+```
+
+```{r}
+plot <- melt(bbike_summary, id.vars = "year") %>%
+  filter(variable == "subscriber" | variable == "customer") 
+plot %>% 
+  ggplot(aes(year, value)) +
+  geom_bar(aes(fill = variable), stat = "identity", position = "stack") +
+  scale_fill_manual(values = c("#FF8F1C", "#0050B5")) +
+  scale_x_continuous(breaks = c(2011, 2012, 2013, 2014, 2015, 2016, 2017)) +
+  xlab("Year") +
+  ylab("Riders") +
+  ggtitle("Number of Riders since 2011") +
+  theme_bw()
+```
+
+```{r}
+bbike_summary %>%
+  ggplot(aes(year, total_trips)) +
+  geom_point(color = "#FF8F1C", size = 2) +
+  geom_line(color = "#1D428A", alpha = 0.7) +
+  xlab("Year") +
+  ylab("Numbers") +
+  ggtitle("Total Number of Trips since 2011") +
+  theme_bw()
+```
+
+### Blue bike Stations
+```{r}
+# Create data frame
+dat_station<- read.csv("Hubway_Stations_as_of_July_2017.csv")
+dat_2017_station <- bbike %>% 
+  group_by(start.station.id) %>% summarize(number = n(), start.station.latitude=first(start.station.latitude), start.station.longitude=first(start.station.longitude),start.station.name=first(start.station.name))%>% filter(start.station.latitude>0)
+summary(dat_2017_station)
+```
+
+### Map about number of users at each station 
+```{r}
+# Distinguish stations by color based on the number of users
+getColor <- function(df){
+  sapply(df$number, function(number) {
+  if(number %in% 1:4000) {
+    "green"
+  } else if(number %in% 4001:10000) {
+    "orange"
+  } else if(number >10000) {
+    "red"
+  } else {
+    "blue"
+  } })
+}
+
+icons <- awesomeIcons(
+  icon = 'ios-close',
+  iconColor = 'black',
+  library = 'ion',
+  markerColor = getColor(dat_2017_station)
+)
+
+leaflet(dat_2017_station) %>% addTiles() %>%
+  addAwesomeMarkers(~start.station.longitude
+, ~start.station.latitude, icon=icons, label=~as.character(number), popup = ~start.station.name)
+```
+
+
+# Distribution of Trip Duration
+```{r}
+bbike_member <- bbike %>%
+  filter(usertype == "Subscriber")
+```
+
+```{r}
+summary(bbike_member$duration_min)
+```
+As you can see, the data seems to have wrong information. The very long tripduration might be attributable to lost or other errors. Therefore, we limit the range from 0 to 75 minutes for the duration in this study.
+
+```{r}
+bbike_member <- bbike_member %>%
+  filter(duration_min < 75)
+bbike_member %>%
+  mutate(group = ifelse(rain == 0, "no rain", "rain")) %>%
+  ggplot(aes(duration_min, y = ..count.., fill = group)) +
+  geom_density(alpha = 0.2) +
+  xlab("Trip Duration (min)") +
+  ylab("Riders")
+```
+
+```{r, warning = FALSE}
+bbike_member %>%
+  mutate(gender = as.factor(gender)) %>%
+  ggplot(aes(duration_min, y = ..count.., fill = gender)) +
+  geom_density(alpha = 0.2) +
+  xlab("Trip Duration (min)") +
+  ylab("Riders")
+```
+
