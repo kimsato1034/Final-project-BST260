@@ -101,3 +101,74 @@ bbike <- bbike %>%
   left_join(., weather, by = c("year", "month", "day")) 
 ```
 
+## Machine Learning - using logistic regression to predict overtime users characteristics 
+
+### Rationale: With an annual membership, users can ride unlimited bike ride for up to 45 mins. Additional $2.5 will be charged per 30 mins for members. In this analysis, we are interested in learning about the characteristics of overtime riders so that Bluebike can gain extra revenue. 
+
+
+## Only keep memebers in the dataset 
+
+```{r}
+bbikemember <- bbike %>%
+  filter(usertype == "Subscriber")
+
+```
+
+
+### logistic regression
+```{r}
+set.seed(1)
+
+library(caret)
+
+Train <- createDataPartition(bbikemember$overtime, p=0.8, list=FALSE)
+training <- bbikemember[ Train, ]
+testing <- bbikemember[ -Train, ]
+
+bbikemember $overtime = as.factor(as.numeric(as.character(bbikemember $overtime)))
+
+#overall accuracy 
+p = 0.009  #9892/1102560
+y_hat <- sample(c("0","1"), length(testing), replace = TRUE, prob=c (p, 1-p)) %>% 
+  factor(levels = levels(bbikemember$overtime))
+mean(y_hat == testing$overtime)
+
+#logistic regression
+glm.fit <- bbikemember %>% 
+  glm( overtime ~  gender + age + month + day + hour + wday + rain + snownice, data=., family = "binomial")
+
+summary(glm.fit)
+
+#wday.L = Sunday wday.Q = Mondaywday.C = Tuesdaywday^4 = Wednesday wday^5 = Thursday wday^6 = Friday Intercept = Saturday 
+
+#prediction
+p_hat <- predict(glm.fit, newdata=testing,type="response")
+y_hat <- ifelse(p_hat > 0.5, "1", "0") %>% factor()
+
+#confusion matrix 
+confusionMatrix(y_hat, testing$overtime)
+table(predicted = y_hat, actual = testing$overtime)
+
+```
+
+
+#### ROC  
+```{r}
+
+library(purrr)
+library(caret)
+library(ggplot2)
+
+probs <- seq(0, 1, length.out = 10)
+guessing <- map_df(probs, function(p){
+  y_hat <- 
+    sample(c("0", "1"), length(testing), replace = TRUE, prob=c(p, 1-p)) %>%
+    factor(levels = levels(bbikemember$overtime))
+  list(method = "Guessing",
+       FPR = 1 - specificity(y_hat, bbikemember$overtime),
+       TPR = sensitivity(y_hat, bbikemember$overtime))
+})
+guessing %>% qplot(FPR, TPR, data =., xlab = "1 - Specificity", ylab = "Sensitivity")
+
+```
+
