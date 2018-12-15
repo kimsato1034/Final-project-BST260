@@ -338,7 +338,6 @@ table(predicted = y_hat, actual = testing$overtime)
 confusionMatrix(data = factor(y_hat), reference = factor(testing$overtime))
 ```
 
-
 #### ROC  
 
 ```{r}
