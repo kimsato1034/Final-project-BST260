@@ -132,6 +132,7 @@ knitr::include_graphics("https://d21xlh2maitm24.cloudfront.net/bos/Screen-Shot-2
 
 ```{r}
 bbike_summary <- read_excel("bluebike_summary.xlsx")
+bbike_summary <- as.data.frame(bbike_summary)
 ```
 
 ```{r}
@@ -159,7 +160,7 @@ bbike_summary %>%
   theme_bw()
 ```
 
-```{r}
+```{r, warning = FALSE}
 bbike %>%
         mutate(gender = as.factor(gender)) %>%
         ggplot(aes(age_cat)) +
@@ -246,7 +247,7 @@ bbike %>%
         group_by(age_cat) %>% 
         summarize(avg = mean(dist_km), se = sd(dist_km) / sqrt(n())) %>% 
   ggplot(aes(age_cat, avg))+ 
-  geom_boxplot(aes(ymin = avg - 2*se, ymax = avg+2 * se))+
+  geom_errorbar(aes(ymin = avg - 2*se, ymax = avg+2 * se), width = 0.2)+
   geom_point(color = "#FF8F1C")+
   geom_line(color = "#1D428A")+
   scale_x_continuous(breaks=(c(1,2,3,4,5,6,7,8)), labels=c("10-20","20-30","30-40","40-50","50-60","60-70","70-80","80-"))+
@@ -296,7 +297,7 @@ y_hat <- sample(c("0","1"), length(testing), replace = TRUE, prob=c(p, 1-p)) %>%
 mean(y_hat == testing$overtime)
 
 #logistic regression
-glm.fit <- bbikemember %>% 
+glm.fit <- training %>% 
   glm(overtime ~ gender + age + month + satsun + rain_cat +
                snownice_cat + user_start + user_end, data=., family = "binomial")
 
@@ -316,7 +317,7 @@ confusionMatrix(data = factor(y_hat), reference = factor(testing$overtime))
 
 
 #### ROC  
-```{r}
+```{r, warnings = FALSE}
 
 library(purrr)
 library(caret)
@@ -341,7 +342,9 @@ library(party)
 
 png(file = "decision_tree.png")
 
-output_tree <- ctree(overtime ~ gender + age + factor(rain_cat),
+bbikemember <- bbikemember %>%
+        filter(gender != 0)
+output_tree <- ctree(overtime ~ gender + satsun,
                      data = bbikemember)
 plot(output_tree)
 dev.off()
