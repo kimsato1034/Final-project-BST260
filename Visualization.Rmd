@@ -22,11 +22,11 @@ library(reshape2)
 library(devtools)
 ```
 
-# Part 1: Data preparation
+## Data preparation
 
 We used all of the bluebike data in 2017 
 
-## Read the bluebike data in 2017
+### Read the bluebike data in 2017
 ```{r}
 # Importing the all monthly data in 2017
 dat_201701<-read.csv("201701-hubway-tripdata.csv",stringsAsFactors = FALSE)
@@ -48,13 +48,12 @@ dat_2017 <- rbind(dat_201701, dat_201702, dat_201703, dat_201704, dat_201705,
                   dat_201711, dat_201712)
 ```
 
-## Add variables
-
-### 1. age, age_cat, duration_min, year, month, month_abb, day, hour, wday, weekend
+### Add variables
 ```{r}
+## age, age_cat, duration_min, year, month, month_abb, day, hour, wday, weekend
 bbike <- dat_2017 %>%
   mutate(birth.year = as.numeric(birth.year)) %>%
-  mutate(age = 2017 - birth.year) %>%
+        mutate(age = 2017 - birth.year) %>%
   mutate(age_cat = case_when(
     .$age >= 10 & .$age < 20 ~ 1,
     .$age >= 20 & .$age < 30 ~ 2,
@@ -73,20 +72,20 @@ bbike <- dat_2017 %>%
          wday = wday(starttime, label = TRUE, abbr = TRUE))
 ```
 
-### 2. dist_km
 ```{r}
+## Trip distance (km)
 setDT(bbike)[ , dist_km := distGeo(matrix(c(start.station.longitude, start.station.latitude), ncol = 2),matrix(c(end.station.longitude, end.station.latitude), ncol = 2))/1000]
 bbike <- as.data.frame(bbike)
 ```
 
-### 3. overtime (if duration_min >  45, 1, 0)
 ```{r}
+## overtime (if duration_min >  45, 1, 0)
 bbike <- bbike %>%
-  mutate(overtime = ifelse(duration_min > 45, "1", "0"))
+  mutate(overtime = ifelse(duration_min > 45, 1, 0))
 ```
 
-### 4. user_start, user_end: number of users at the start/end station
 ```{r}
+## user_start, user_end: number of users at the start/end station
 bbike <- bbike %>%
   group_by(start.station.id) %>%
   mutate(user_start = n())
@@ -96,43 +95,30 @@ bbike <- bbike %>%
   mutate(user_end = n())
 ```
 
-## Combine weather information: temp_max, temp_min, rain, snownice(snow or ice)
+### Combine weather information
 ```{r}
+## temp_max, temp_min, rain, snownice(snow or ice)
 weather <- read_excel("boston_weather.xls")
-```
-
-```{r}
 bbike <- bbike %>%
   group_by(year, month, day) %>%
   left_join(., weather, by = c("year", "month", "day")) 
 ```
 
-## Combine crash information daily
+### Combine crash information daily
 ```{r}
 crash <- read.csv("crash_sept.csv", stringsAsFactors = FALSE)
 crash <- crash %>%
   mutate(year = year(dispatch_ts), month = month(dispatch_ts), day = day(dispatch_ts))
-```
-
-```{r}
 temp <- crash %>%
   filter(year == 2017) %>%
   group_by(year, month, day, mode_type) %>%
   summarise(crash = n())
 crash_wide <- temp %>%
   spread(mode_type, crash)
-```
-
-```{r}
 bbike_crash <- left_join(bbike, crash_wide, by = c("year", "month", "day"))
 ```
 
-
-
-
-
-
-# Motivation
+## Motivation
 
 The number of bluelike users has increased over several years. Among subscribers, if they pay $99 per year, they can use it unlimitedly. However, there is a time limit, for 45 minutes per once. We are going to figure out when they do not return their bike within 45 minutes and predict the pattern.
 
@@ -173,11 +159,21 @@ bbike_summary %>%
   theme_bw()
 ```
 
+```{r}
+bbike %>%
+        mutate(gender = as.factor(gender)) %>%
+        ggplot(aes(age_cat)) +
+        geom_bar(aes(fill = gender)) +
+        scale_fill_brewer( palette = "Oranges")
+```
+
 ### Blue bike Stations
 ```{r}
 # Create data frame
 dat_station<- read.csv("Hubway_Stations_as_of_July_2017.csv")
-dat_2017_station <- bbike %>% 
+dat_2017_station <- bbike %>%
+filter(!birth.year=="\\N")%>%
+                        filter(birth.year>1900 & birth.year<=2017)%>%
   group_by(start.station.id) %>% summarize(number = n(), start.station.latitude=first(start.station.latitude), start.station.longitude=first(start.station.longitude),start.station.name=first(start.station.name))%>% filter(start.station.latitude>0)
 summary(dat_2017_station)
 ```
@@ -224,7 +220,7 @@ As you can see, the data seems to have wrong information. The very long tripdura
 
 ```{r}
 bbike_member <- bbike_member %>%
-  filter(duration_min < 75)
+  filter(duration_min < 50)
 bbike_member %>%
   mutate(group = ifelse(rain == 0, "no rain", "rain")) %>%
   ggplot(aes(duration_min, y = ..count.., fill = group)) +
@@ -240,5 +236,114 @@ bbike_member %>%
   geom_density(alpha = 0.2) +
   xlab("Trip Duration (min)") +
   ylab("Riders")
+```
+
+### Trip distance
+```{r}
+# Distance
+bbike %>% 
+        filter(birth.year > 1900 & birth.year <= 2017)%>%
+        group_by(age_cat) %>% 
+        summarize(avg = mean(dist_km), se = sd(dist_km) / sqrt(n())) %>% 
+  ggplot(aes(age_cat, avg))+ 
+  geom_boxplot(aes(ymin = avg - 2*se, ymax = avg+2 * se))+
+  geom_point(color = "#FF8F1C")+
+  geom_line(color = "#1D428A")+
+  scale_x_continuous(breaks=(c(1,2,3,4,5,6,7,8)), labels=c("10-20","20-30","30-40","40-50","50-60","60-70","70-80","80-"))+
+  xlab(expression(paste(Age, " (years)")))+
+  ylab(expression(paste(Distance," (km)"))) +
+        theme_bw()
+```
+There is no consistent trend between age and trip distance.
+
+
+## Machine Learning - using logistic regression to predict overtime users characteristics 
+
+### Rationale: With an annual membership, users can ride unlimited bike ride for up to 45 mins. Additional $2.5 will be charged per 30 mins for members. In this analysis, we are interested in learning about the characteristics of overtime riders so that Bluebike can gain extra revenue. 
+
+
+## Only keep memebers in the dataset 
+
+```{r}
+bbikemember <- bbike %>%
+        ungroup() %>%
+  filter(usertype == "Subscriber" & duration_min < 50) %>%
+        mutate(gender = as.factor(gender), day = as.factor(day),
+               hour = as.factor(hour)) %>%
+        mutate(rain_cat = ifelse(rain == 0, 0, 1)) %>%
+        mutate(snownice_cat = ifelse(snownice == 0, 0, 1)) %>%
+        mutate(overtime = ifelse(duration_min < 15, 0, 1)) %>%
+        mutate(satsun = ifelse(wday %in% c("Sat", "Sun"), 1, 0))
+```
+
+
+### logistic regression
+```{r}
+set.seed(1)
+
+library(caret)
+
+Train <- createDataPartition(bbikemember$overtime, p=0.5, list=FALSE)
+training <- bbikemember[ Train, ]
+testing <- bbikemember[ -Train, ]
+
+bbikemember$overtime = as.factor(as.numeric(as.character(bbikemember $overtime)))
+
+#overall accuracy 
+p = 0.358  #290235/810623
+y_hat <- sample(c("0","1"), length(testing), replace = TRUE, prob=c(p, 1-p)) %>% 
+  factor(levels = levels(bbikemember$overtime))
+mean(y_hat == testing$overtime)
+
+#logistic regression
+glm.fit <- bbikemember %>% 
+  glm(overtime ~ gender + age + month + satsun + rain_cat +
+               snownice_cat + user_start + user_end, data=., family = "binomial")
+
+summary(glm.fit)
+
+#wday.L = Sunday wday.Q = Mondaywday.C = Tuesdaywday^4 = Wednesday wday^5 = Thursday wday^6 = Friday Intercept = Saturday 
+
+#prediction
+p_hat <- predict(glm.fit, newdata=testing,type="response")
+y_hat <- ifelse(p_hat > 0.5, 1, 0) %>% factor()
+
+#confusion matrix 
+table(predicted = y_hat, actual = testing$overtime)
+
+confusionMatrix(data = factor(y_hat), reference = factor(testing$overtime))
+```
+
+
+#### ROC  
+```{r}
+
+library(purrr)
+library(caret)
+library(ggplot2)
+
+probs <- seq(0, 1, length.out = 10)
+guessing <- map_df(probs, function(p){
+  y_hat <- 
+    sample(c("0", "1"), length(testing), replace = TRUE, prob=c(p, 1-p)) %>%
+    factor(levels = levels(bbikemember$overtime))
+  list(method = "Guessing",
+       FPR = 1 - specificity(y_hat, bbikemember$overtime),
+       TPR = sensitivity(y_hat, bbikemember$overtime))
+})
+guessing %>% qplot(FPR, TPR, data =., xlab = "1 - Specificity", ylab = "Sensitivity")
+
+```
+
+### Decision tree
+```{r}
+library(party)
+
+png(file = "decision_tree.png")
+
+output_tree <- ctree(overtime ~ gender + age + factor(rain_cat),
+                     data = bbikemember)
+plot(output_tree)
+dev.off()
 ```
 
