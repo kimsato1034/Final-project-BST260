@@ -35,7 +35,9 @@ library(devtools)
 * Given Bluebike only collects information on subscribers, how can we predict the characteristics and conditions for overtime users? 
 ## Data preparation
 
-We used all of the bluebike data in 2017 
+### Approach
+Starting with web scrapping we collected datasets from Boston Hubway and weather sites, focusing on the year 2017. We merged these datasets into a single csv file for our subsequent analysis. We performed exploratory analysis of bluebike riders in Boston, with the hopes of trying to have a general idea of who a typical Blue bike subscriber was, and how their riding pattern changed with changing weather. 
+We then drilled down on bluebike subscribers who ride overtime, meaning more than 45 mins. Since these people pay an extra $2.5 per 30mins, and thus make bluebike company extra revenue. This informed our subsequent analysis, using multiple logistic regression techniques and Decision tree analysis. We tried to predict the typical oversubscriber and what day of the week such a rider would be out and about.  
 
 ### Read the bluebike data in 2017
 ```{r}
@@ -115,20 +117,6 @@ bbike <- bbike %>%
   left_join(., weather, by = c("year", "month", "day")) 
 ```
 
-### Combine crash information daily
-```{r}
-crash <- read.csv("crash_sept.csv", stringsAsFactors = FALSE)
-crash <- crash %>%
-  mutate(year = year(dispatch_ts), month = month(dispatch_ts), day = day(dispatch_ts))
-temp <- crash %>%
-  filter(year == 2017) %>%
-  group_by(year, month, day, mode_type) %>%
-  summarise(crash = n())
-crash_wide <- temp %>%
-  spread(mode_type, crash)
-bbike_crash <- left_join(bbike, crash_wide, by = c("year", "month", "day"))
-```
-
 ## Motivation
 
 The number of bluelike users has increased over several years. Among subscribers, if they pay $99 per year, they can use it unlimitedly. However, there is a time limit, for 45 minutes per once. We are going to figure out when they do not return their bike within 45 minutes and predict the pattern.
@@ -173,10 +161,15 @@ bbike_summary %>%
 
 ```{r, warning = FALSE}
 bbike %>%
-        mutate(gender = as.factor(gender)) %>%
-        ggplot(aes(age_cat)) +
-        geom_bar(aes(fill = gender)) +
-        scale_fill_brewer( palette = "Oranges")
+  mutate(gender = as.factor(gender)) %>%
+  filter(gender != "0") %>%  #1 is male #2 is female #0 is unknown
+  ggplot(aes(age_cat)) +
+  geom_bar(aes(fill = gender)) +
+  scale_fill_brewer( palette = "Oranges")+
+  xlab("Age category (10s, 20s, 30s etc)") +
+  ylab("Number of rides") +
+  ggtitle("Total Number of Trips by gender by age") +
+  theme_bw()
 ```
 
 ### Blue bike Stations
@@ -218,6 +211,25 @@ leaflet(dat_2017_station) %>% addTiles() %>%
 , ~start.station.latitude, icon=icons, label=~as.character(number), popup = ~start.station.name)
 ```
 
+### Hourly
+```{r}
+bbike %>% ggplot(aes(hour))+
+  geom_bar()+
+  scale_x_continuous(breaks=(c(0,4,8,12,16,20)))+
+  xlab("Hour")+
+  ylab("Number of users") +
+        facet_wrap(~ wday)
+```
+
+```{r}
+bbike %>% ggplot(aes(hour))+
+  geom_bar(aes(fill = factor(gender)))+
+  scale_x_continuous(breaks=(c(0,4,8,12,16,20)))+
+  xlab("Hour")+
+  ylab("Number of users") +
+        facet_wrap(~ month) +
+        scale_fill_discrete("Gender", labels = c("Unknown", "Male", "Female"))
+```
 
 # Distribution of Trip Duration
 ```{r}
@@ -279,12 +291,13 @@ There is no consistent trend between age and trip distance.
 ```{r}
 bbikemember <- bbike %>%
         ungroup() %>%
-  filter(usertype == "Subscriber" & duration_min < 50) %>%
+  filter(usertype == "Subscriber" & duration_min < 75) %>%
         mutate(gender = as.factor(gender), day = as.factor(day),
                hour = as.factor(hour)) %>%
         mutate(rain_cat = ifelse(rain == 0, 0, 1)) %>%
         mutate(snownice_cat = ifelse(snownice == 0, 0, 1)) %>%
         mutate(overtime = ifelse(duration_min < 15, 0, 1)) %>%
+        mutate(overtime = as.factor(overtime)) %>%
         mutate(satsun = ifelse(wday %in% c("Sat", "Sun"), 1, 0)) %>%
         mutate(satsun = as.factor(satsun))
 ```
@@ -315,10 +328,8 @@ glm.fit <- training %>%
 
 summary(glm.fit)
 
-#wday.L = Sunday wday.Q = Mondaywday.C = Tuesdaywday^4 = Wednesday wday^5 = Thursday wday^6 = Friday Intercept = Saturday 
-
 #prediction
-p_hat <- predict(glm.fit, newdata=testing,type="response")
+p_hat <- predict(glm.fit, newdata=testing, type="response")
 y_hat <- ifelse(p_hat > 0.5, 1, 0) %>% factor()
 
 #confusion matrix 
@@ -329,6 +340,26 @@ confusionMatrix(data = factor(y_hat), reference = factor(testing$overtime))
 
 
 #### ROC  
+
+```{r}
+library(pROC)
+model <- training %>%
+ glm(overtime ~ gender + age + month + satsun + rain_cat +
+              snownice_cat + user_start + user_end, data=., family = "binomial")
+#First example
+predpr <- predict(model, newdata=testing, type="response")
+roccurve<- roc(testing$overtime~predpr)
+plot(roccurve)
+roccurve
+
+# Second example
+predict <- predict(model, newdata=testing, type = "response")
+library(ROCR)
+ROCRpred <- prediction(predict, testing$overtime)
+ROCRperf <- performance(ROCRpred, 'tpr','fpr')
+plot(ROCRperf, colorize = F, text.adj = c(-0.2,1.7))
+```
+
 ```{r, warnings = FALSE, masseges = FALSE}
 
 library(purrr)
