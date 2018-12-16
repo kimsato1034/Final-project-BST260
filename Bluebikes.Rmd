@@ -1,0 +1,406 @@
+---
+title: "Analsys of Boston's Bluebike Data"
+author: "Satoshi, Nora, Adam, and Jiyoon"
+date: "December 18, 2018"
+output: html_document
+---
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+library(dplyr)
+library(leaflet)
+library(geosphere)
+library(data.table)
+library(ggplot2)
+library(lubridate)
+library(caret)
+library(readxl)
+library(tidyverse)
+library(ggthemes)
+library(ggrepel)
+library(reshape)
+library(reshape2)
+library(devtools)
+library(purrr)
+library(caret)
+library(ggplot2)
+library(party)
+library(pROC)
+library(ROCR)
+library(MASS)
+```
+
+## Project Overview
+
+### Motivation
+Bikesharing has become more and more popular in major cities in the United States ["Americans are falling in love with bikeshare"](https://www.wired.com/story/americans-falling-in-love-bike-share/). *The Bluebikes* is a Metro Boston's public bike share program, with over 1,800 bikes and more than 200 stations across Boston, Brookline, Cambridge, and Somerville. Bluebike operates under the customer and subscriber systems. In 2017, the total number of trips is 1,313,837, and the number of subscribers is 14,577. For the individual `customer`, the single trip pass costs 2.5 dollars for 30 mins ride, with 2.5 dollars for an additional 30 mins. For the `subscriber`, Bluebike requires a membership fee of 99 dollars per year and the subscriber can have unlimited rides, with each ride under 45 mins. For any additional 30 mins post 45 mins ride, the subscriber would need to pay $2.5. 
+
+
+```{r,echo = FALSE}
+knitr::include_graphics("https://d21xlh2maitm24.cloudfront.net/bst/MeetBike-Intro.png?mtime=20180507212454")
+```
+
+```{r, echo = FALSE}
+bbike_summary <- read_excel("bluebike_summary.xlsx")
+bbike_summary <- as.data.frame(bbike_summary)
+```
+
+```{r, echo = FALSE}
+plot <- melt(bbike_summary, id.vars = "year") %>%
+  filter(variable == "subscriber" | variable == "customer") 
+plot %>% 
+  ggplot(aes(year, value)) +
+  geom_bar(aes(fill = variable), stat = "identity", position = "stack") +
+  scale_fill_manual(values = c("#FF8F1C", "#0050B5")) +
+  scale_x_continuous(breaks = c(2011, 2012, 2013, 2014, 2015, 2016, 2017)) +
+  xlab("Year") +
+  ylab("Riders") +
+  ggtitle("Number of Riders since 2011") +
+  theme_bw()
+```
+
+This graph shows that the number of Bluebike subscribers and customers had increased dramatically from 2011 to 2013 and has maintained the high number of riders until 2017.
+
+```{r, echo = FALSE}
+bbike_summary %>%
+  ggplot(aes(year, total_trips)) +
+  geom_point(color = "#FF8F1C", size = 2) +
+  geom_line(color = "#1D428A", alpha = 0.7) +
+  xlab("Year") +
+  ylab("Numbers") +
+  ggtitle("Total Number of Trips since 2011") +
+  theme_bw()
+```
+
+This line chart shows the total number of the Bluebike trips, which could count multiple rides of one user. The number of trips also increased in the first part of the years as the number of users did. On the contrary to the number of riders, the trip counts have still increased in these few years.
+
+### Objectives
+
+#### For this project, we would like to understand 
+* What are the general demographics of bike riders? 
+* How does the frequency of bike riding change with time, day and month of the year? 
+* Does weather affect bike riding? 
+* Given Bluebike only collects information on subscribers, how can we predict the characteristics and conditions for overtime users? 
+
+### Approach
+Starting with web scrapping we collected datasets from Boston Hubway and weather sites, focusing on the year 2017. We merged these datasets into a single csv file for our subsequent analysis. We performed exploratory analysis of bluebike riders in Boston, with the hopes of trying to have a general idea of who a typical Blue bike subscriber was, and how their riding pattern changed with changing weather. 
+We then drilled down on bluebike subscribers who ride overtime, meaning more than 45 mins. Since these people pay an extra $2.5 per 30mins, and thus make bluebike company extra revenue. This informed our subsequent analysis, using multiple logistic regression techniques and Decision tree analysis. We tried to predict the typical oversubscriber and what day of the week such a rider would be out and about.  
+
+
+## Data Preparation
+```{r}
+# Importing the all Bluebike data in 2017
+dat_201701<-read.csv("201701-hubway-tripdata.csv",stringsAsFactors = FALSE)
+dat_201702<-read.csv("201702-hubway-tripdata.csv",stringsAsFactors = FALSE)
+dat_201703<-read.csv("201703-hubway-tripdata.csv",stringsAsFactors = FALSE)
+dat_201704<-read.csv("201704-hubway-tripdata.csv",stringsAsFactors = FALSE)
+dat_201705<-read.csv("201705-hubway-tripdata.csv",stringsAsFactors = FALSE)
+dat_201706<-read.csv("201706-hubway-tripdata.csv",stringsAsFactors = FALSE)
+dat_201707<-read.csv("201707-hubway-tripdata.csv",stringsAsFactors = FALSE)
+dat_201708<-read.csv("201708-hubway-tripdata.csv",stringsAsFactors = FALSE)
+dat_201709<-read.csv("201709-hubway-tripdata.csv",stringsAsFactors = FALSE)
+dat_201710<-read.csv("201710-hubway-tripdata.csv",stringsAsFactors = FALSE)
+dat_201711<-read.csv("201711-hubway-tripdata.csv",stringsAsFactors = FALSE)
+dat_201712<-read.csv("201712-hubway-tripdata.csv",stringsAsFactors = FALSE)
+
+# Combining the data
+dat_2017 <- rbind(dat_201701, dat_201702, dat_201703, dat_201704, dat_201705,
+                  dat_201706, dat_201707, dat_201708, dat_201709, dat_201710,
+                  dat_201711, dat_201712)
+```
+
+#### Adding variables
+```{r, warning = FALSE}
+# age, age_cat, duration_min, year, month, month_abb, day, hour, wday
+bbike <- dat_2017 %>%
+  mutate(birth.year = as.numeric(birth.year)) %>%
+        mutate(age = 2017 - birth.year) %>%
+  mutate(age_cat = case_when(
+    .$age >= 10 & .$age < 20 ~ 1,
+    .$age >= 20 & .$age < 30 ~ 2,
+    .$age >= 30 & .$age < 40 ~ 3,
+    .$age >= 40 & .$age < 50 ~ 4,
+    .$age >= 50 & .$age < 60 ~ 5,
+    .$age >= 60 & .$age < 70 ~ 6,
+    .$age >= 70 & .$age < 80 ~ 7,
+    .$age >= 80 ~ 8)) %>%
+  mutate(duration_min = tripduration / 60) %>%
+  mutate(year = year(starttime), 
+         month = month(starttime),
+         month_abb = month(starttime, label = TRUE, abbr = TRUE), 
+         day = day(starttime),
+         hour = hour(starttime), 
+         wday = wday(starttime, label = TRUE, abbr = TRUE))
+```
+
+```{r}
+# dist_km: Trip distance (km)
+setDT(bbike)[ , dist_km := distGeo(matrix(c(start.station.longitude, start.station.latitude), ncol = 2),matrix(c(end.station.longitude, end.station.latitude), ncol = 2))/1000]
+bbike <- as.data.frame(bbike)
+```
+
+```{r}
+# overtime
+bbike <- bbike %>%
+  mutate(overtime = ifelse(duration_min > 45, 1, 0))
+```
+
+```{r}
+# user_start, user_end: number of users at the start/end station
+bbike <- bbike %>%
+  group_by(start.station.id) %>%
+  mutate(user_start = n())
+
+bbike <- bbike %>%
+  group_by(end.station.id) %>%
+  mutate(user_end = n())
+```
+
+#### Combining weather information
+```{r}
+## temp_max, temp_min, rain, snownice(snow or ice)
+weather <- read_excel("boston_weather.xls")
+bbike <- bbike %>%
+  group_by(year, month, day) %>%
+  left_join(., weather, by = c("year", "month", "day")) 
+```
+
+
+## Analysis
+
+#### Number of trips by gender and age
+```{r, warning = FALSE}
+bbike %>%
+  mutate(gender = as.factor(gender)) %>%
+  filter(gender != "0") %>%  #1 is male #2 is female #0 is unknown
+  ggplot(aes(factor(age_cat))) +
+  geom_bar(aes(fill = gender)) +
+  scale_x_discrete("Age", 
+                   labels = c('10s','20s','30s','40s','50s','60s','70s','80+')) +
+  scale_fill_discrete("Gender", labels = c("Male", "Female")) +
+  scale_y_continuous("Number of Rides") +
+  ggtitle("Total Number of Trips by Gender and Age") +
+  theme_bw()
+```
+
+In this bar chart, people with gender-code “0” were removed from the analysis. Age was stratified into bands of 10 years in width and shows as categorical variable for comparison. Main Blue Bike users are 20s or 30s, and male users are dominant in each generation.
+
+
+#### Blue bike Stations
+```{r}
+# Create data frame
+dat_station<- read.csv("Hubway_Stations_as_of_July_2017.csv")
+dat_2017_station <- bbike %>%
+filter(!birth.year=="\\N")%>%
+                        filter(birth.year>1900 & birth.year<=2017)%>%
+  group_by(start.station.id) %>% summarize(number = n(), start.station.latitude=first(start.station.latitude), start.station.longitude=first(start.station.longitude),start.station.name=first(start.station.name))%>% filter(start.station.latitude>0)
+summary(dat_2017_station)
+```
+
+#### Mapping about number of users at each station 
+```{r}
+# Distinguish stations by color based on the number of users
+getColor <- function(df){
+  sapply(df$number, function(number) {
+  if(number %in% 1:4000) {
+    "green"
+  } else if(number %in% 4001:10000) {
+    "orange"
+  } else if(number >10000) {
+    "red"
+  } else {
+    "blue"
+  } })
+}
+
+icons <- awesomeIcons(
+  icon = 'ios-close',
+  iconColor = 'black',
+  library = 'ion',
+  markerColor = getColor(dat_2017_station)
+)
+
+leaflet(dat_2017_station) %>% addTiles() %>%
+  addAwesomeMarkers(~start.station.longitude
+, ~start.station.latitude, icon=icons, label=~as.character(number), popup = ~start.station.name)
+```
+
+This map classified Blue Bike stations into three categories based on the number of trips in 2017: Red stations are most popular, orange stations are moderate and green stations are least popular. The most popular station was “MIT at Mass Ave / Amherst St”, at the number of trips 35,700 per year. The least popular station was “Four Corners – 157 Washington St”, at the number of trips just four per year.
+
+#### Number of trips in each hour within a day through Sunday to Saturday
+```{r}
+bbike %>% ggplot(aes(hour))+
+  geom_bar()+
+  scale_x_continuous(breaks=(c(0,4,8,12,16,20)))+
+  xlab("Time")+
+  ylab("Number of Users") +
+  facet_wrap(~ wday)
+```
+
+These bar graphs show the number of trips in each hour within a day through Sunday to Saturday. We can see biphasic trend of 8 am and 5 pm on weekday, which are consistent with commute time. On the other hand, we could see a completely different trend on weekend.
+
+```{r, fig.width = 7}
+bbike %>% 
+  ggplot(aes(hour)) +
+  geom_bar(aes(fill = factor(gender))) +
+  scale_x_continuous(breaks=(c(0,4,8,12,16,20))) +
+  scale_fill_discrete("Gender", labels = c("Unknown", "Male", "Female")) +
+  xlab("Time")+
+  ylab("Number of users") +
+  facet_wrap(~ month)
+
+```
+
+The figure shows seasonal comparison of users throughout a year. As expected, we see small number of trips in winter.
+
+#### Distribution of Trip Duration
+```{r}
+bbike_member <- bbike %>%
+  filter(usertype == "Subscriber")
+```
+
+```{r}
+summary(bbike_member$duration_min)
+```
+As you can see, the data seems to have wrong information. The very long tripduration might be attributable to lost or other errors. Therefore, we limit the range from 0 to 75 minutes for the duration in this study.
+
+```{r}
+bbike_member <- bbike_member %>%
+  filter(duration_min < 50)
+bbike_member %>%
+  mutate(group = ifelse(rain == 0, "no rain", "rain")) %>%
+  ggplot(aes(duration_min, y = ..count.., fill = group)) +
+  geom_density(alpha = 0.2) +
+scale_fill_discrete("Rain", labels = c("No rain", "Rain")) +
+  xlab("Trip Duration (min)") +
+  ylab("Riders")
+```
+
+Since the maximum trip duration 61276.80 minutes, we decided to cap our analysis at 75mins. As a bike-leasing organization, a very long trip duration might probably be due to a missing bike or some unknown reason.
+
+Unsurprisingly, we see that many riders use the bikes when the weather is more conducive. The number of blue-bike users when it is not raining is more than double the number of people who use the bikes in the rain. 
+
+```{r, warning = FALSE}
+bbike_member %>%
+  mutate(gender = as.factor(gender)) %>%
+  ggplot(aes(duration_min, y = ..count.., fill = gender)) +
+  geom_density(alpha = 0.2) +
+  scale_fill_discrete("Gender", labels = c("Unknown", "Male", "Female")) +
+  xlab("Trip Duration (min)") +
+  ylab("Riders")
+```
+
+This gender difference was however not very obvious after about 40mins. Again we can infer from this graphic that, gender played little role among over time riders.
+
+#### Trip distance
+```{r}
+# Distance
+bbike %>% 
+        filter(birth.year > 1900 & birth.year <= 2017)%>%
+        group_by(age_cat) %>% 
+        summarize(avg = mean(dist_km), se = sd(dist_km) / sqrt(n())) %>% 
+  ggplot(aes(age_cat, avg))+ 
+  geom_errorbar(aes(ymin = avg - 2*se, ymax = avg+2 * se), width = 0.2)+
+  geom_point(color = "#FF8F1C")+
+  geom_line(color = "#1D428A")+
+  scale_x_continuous(breaks=(c(1,2,3,4,5,6,7,8)), 
+                     labels=c("10s","20s","30s","40s","50s","60s","70s","80+"))+
+  xlab(expression(paste(Age, " (years)")))+
+  ylab(expression(paste(Distance," (km)"))) +
+  ggtitle("Bike rides and Gender") +
+  theme_bw()
+```
+
+Here there’s an initial upward trend we see with age and distance covered in kilometers. As age increased from the teens to about age 50, the distance covered also increased. This positive linear relationship was at age 50, after which we began to see a decline. Interestingly, there was another upward trend after age 80.
+
+
+## Prediction
+
+* We applied 'Machine Learning' by using logistic regression to predict overtime users characteristics 
+* Rationale: With an annual membership, users can ride unlimited bike ride for up to 45 mins. Additional $2.5 will be charged per 30 mins for members. In this analysis, we are interested in learning about the characteristics of overtime riders so that Bluebike can gain extra revenue. 
+
+```{r}
+# Keep only the subscribers in the dataset 
+bbikemember <- bbike %>%
+        ungroup() %>%
+  filter(usertype == "Subscriber" & duration_min < 75) %>%
+        mutate(gender = as.factor(gender), day = as.factor(day),
+               hour = as.factor(hour)) %>%
+        mutate(rain_cat = ifelse(rain == 0, 0, 1)) %>%
+        mutate(snownice_cat = ifelse(snownice == 0, 0, 1)) %>%
+        mutate(overtime = ifelse(duration_min < 15, 0, 1)) %>%
+        mutate(overtime = as.factor(overtime)) %>%
+        mutate(satsun = ifelse(wday %in% c("Sat", "Sun"), 1, 0)) %>%
+        mutate(satsun = as.factor(satsun)) %>%
+        filter(gender != 0)
+```
+
+#### Decision tree
+```{r, warning = FALSE, message = FALSE, fig.width = 10}
+output_tree <- ctree(overtime ~ gender + factor(rain_cat) + factor(snownice_cat),
+                     data = bbikemember)
+plot(output_tree)
+```
+
+```{r}
+output_tree1 <- ctree(overtime ~ gender + satsun,
+                     data = bbikemember)
+plot(output_tree1)
+```
+
+
+#### logistic regression
+```{r, warning = FALSE}
+set.seed(1)
+
+library(caret)
+
+Train <- createDataPartition(bbikemember$overtime, p=0.5, list=FALSE)
+training <- bbikemember[ Train, ]
+testing <- bbikemember[ -Train, ]
+
+bbikemember$overtime = as.factor(as.numeric(as.character(bbikemember $overtime)))
+
+#overall accuracy 
+p = 0.358  #290235/810623
+y_hat <- sample(c("0","1"), length(testing), replace = TRUE, prob=c(p, 1-p)) %>% 
+  factor(levels = levels(bbikemember$overtime))
+mean(y_hat == testing$overtime)
+
+#logistic regression
+glm.fit <- training %>% 
+  glm(overtime ~ gender + age + month + satsun + rain_cat +
+               snownice_cat + user_start + user_end, data=., family = "binomial")
+
+summary(glm.fit)
+
+exp(cbind(OR=coef(glm.fit), confint.default(glm.fit)))
+
+#prediction
+p_hat <- predict(glm.fit, newdata=testing, type="response")
+y_hat <- ifelse(p_hat > 0.5, 1, 0) %>% factor()
+
+#confusion matrix 
+table(predicted = y_hat, actual = testing$overtime)
+
+confusionMatrix(data = factor(y_hat), reference = factor(testing$overtime))
+```
+
+#### ROC  
+```{r, warning = FALSE, message = FALSE}
+model<-training %>%
+glm(overtime ~ gender + age + month + satsun + rain_cat +
+             snownice_cat + user_start + user_end, data=., family = "binomial")
+
+predpr <- predict(model, newdata=testing, type="response")
+roccurve<- roc(testing$overtime~predpr)
+roccurve
+
+predict <- predict(model, newdata=testing, type = "response")
+
+ROCRpred <- prediction(predict, testing$overtime)
+ROCRperf <- performance(ROCRpred, 'tpr','fpr')
+plot(ROCRperf, colorize = F, text.adj = c(-0.2,1.7))
+```
+
+In this logistic regression model, we put gender, age, weekend, rain, snow, the popularity of starting stations, and the popularity of ending stations in order to predict overtime riders. We created training dataset for building a model and testing dataset for check the performance of the model. Because of the big sample size, we got statistically higher or lower odds of over-riding in all of the covariates. However, if we look at the odds ratio, we could realize something interesting. The odds ratio of over-riding when it snowed is 0.54 (95% CI: 0.50 to 0.59) times the odds when it did not. The odds ratio of over-riding when it rained is 0.92 (95% CI: 0.91 to 0.93) times the odds when it did not. If it rains or snows, people tend to return bike on time. On the other hand, the odds ratio of over-riding on weekend is 1.28 (95% CI: 1.26 to 1.30) times the odds on weekday. The odds ratio of over-riding among females is 1.37 (95% CI: 1.35 to 1.39) times the odds among males. These data shows females tend to use Blue Bike longer than 45 minutes especially on weekend.
+Finally we drew the ROC curve using the testing dataset. AUC is 0.61, which means this model is not so good model to predict over-ride.
