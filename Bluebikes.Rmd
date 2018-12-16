@@ -1,7 +1,7 @@
 ---
-title: "Analsys of Boston's Bluebike Data"
+title: "Analysis of Boston's Bluebike Data"
 author: "Satoshi, Nora, Adam, and Jiyoon"
-date: "December 18, 2018"
+date: "December 16, 2018"
 output: html_document
 ---
 
@@ -22,7 +22,6 @@ library(reshape2)
 library(devtools)
 library(purrr)
 library(caret)
-library(ggplot2)
 library(party)
 library(pROC)
 library(ROCR)
@@ -50,7 +49,7 @@ plot <- melt(bbike_summary, id.vars = "year") %>%
 plot %>% 
   ggplot(aes(year, value)) +
   geom_bar(aes(fill = variable), stat = "identity", position = "stack") +
-  scale_fill_manual(values = c("#FF8F1C", "#0050B5")) +
+  scale_fill_manual(values = c("#1D428A", "#2CA3E1")) +
   scale_x_continuous(breaks = c(2011, 2012, 2013, 2014, 2015, 2016, 2017)) +
   xlab("Year") +
   ylab("Riders") +
@@ -64,7 +63,7 @@ This graph shows that the number of Bluebike subscribers and customers had incre
 bbike_summary %>%
   ggplot(aes(year, total_trips)) +
   geom_point(color = "#FF8F1C", size = 2) +
-  geom_line(color = "#1D428A", alpha = 0.7) +
+  geom_line(color = "#0090DA") +
   xlab("Year") +
   ylab("Numbers") +
   ggtitle("Total Number of Trips since 2011") +
@@ -171,12 +170,12 @@ bbike <- bbike %>%
 ```{r, warning = FALSE}
 bbike %>%
   mutate(gender = as.factor(gender)) %>%
-  filter(gender != "0") %>%  #1 is male #2 is female #0 is unknown
+  filter(gender != "0") %>%  #1 is male, 2 is female, 0 is unknown
   ggplot(aes(factor(age_cat))) +
   geom_bar(aes(fill = gender)) +
   scale_x_discrete("Age", 
                    labels = c('10s','20s','30s','40s','50s','60s','70s','80+')) +
-  scale_fill_discrete("Gender", labels = c("Male", "Female")) +
+  scale_fill_manual("Gender", values = c("#2CA3E1", "#FF8F1C"), labels = c("Male", "Female")) +
   scale_y_continuous("Number of Rides") +
   ggtitle("Total Number of Trips by Gender and Age") +
   theme_bw()
@@ -229,25 +228,28 @@ This map classified Blue Bike stations into three categories based on the number
 #### Number of trips in each hour within a day through Sunday to Saturday
 ```{r}
 bbike %>% ggplot(aes(hour))+
-  geom_bar()+
+  geom_bar(fill = "#006AC6", color = "#0050B5")+
   scale_x_continuous(breaks=(c(0,4,8,12,16,20)))+
   xlab("Time")+
   ylab("Number of Users") +
-  facet_wrap(~ wday)
+  facet_wrap(~ wday) +
+  theme_fivethirtyeight()
 ```
 
 These bar graphs show the number of trips in each hour within a day through Sunday to Saturday. We can see biphasic trend of 8 am and 5 pm on weekday, which are consistent with commute time. On the other hand, we could see a completely different trend on weekend.
 
 ```{r, fig.width = 7}
 bbike %>% 
+  filter(gender != 0) %>%
   ggplot(aes(hour)) +
   geom_bar(aes(fill = factor(gender))) +
   scale_x_continuous(breaks=(c(0,4,8,12,16,20))) +
-  scale_fill_discrete("Gender", labels = c("Unknown", "Male", "Female")) +
+  scale_fill_manual("Gender", values = c("#0090DA", "#FF8F1C"), 
+                      labels = c("Male", "Female")) +
   xlab("Time")+
   ylab("Number of users") +
-  facet_wrap(~ month)
-
+  facet_wrap(~ month) +
+  theme_economist_white()
 ```
 
 The figure shows seasonal comparison of users throughout a year. As expected, we see small number of trips in winter.
@@ -272,7 +274,8 @@ bbike_member %>%
   geom_density(alpha = 0.2) +
 scale_fill_discrete("Rain", labels = c("No rain", "Rain")) +
   xlab("Trip Duration (min)") +
-  ylab("Riders")
+  ylab("Riders") +
+  theme_bw()
 ```
 
 Since the maximum trip duration 61276.80 minutes, we decided to cap our analysis at 75mins. As a bike-leasing organization, a very long trip duration might probably be due to a missing bike or some unknown reason.
@@ -281,12 +284,15 @@ Unsurprisingly, we see that many riders use the bikes when the weather is more c
 
 ```{r, warning = FALSE}
 bbike_member %>%
+  filter(gender != 0) %>%
   mutate(gender = as.factor(gender)) %>%
   ggplot(aes(duration_min, y = ..count.., fill = gender)) +
   geom_density(alpha = 0.2) +
-  scale_fill_discrete("Gender", labels = c("Unknown", "Male", "Female")) +
+  scale_fill_manual("Gender", values = c("#0090DA", "#FF8F1C"),
+                    labels = c("Male", "Female")) +
   xlab("Trip Duration (min)") +
-  ylab("Riders")
+  ylab("Riders") +
+  theme_bw()
 ```
 
 This gender difference was however not very obvious after about 40mins. Again we can infer from this graphic that, gender played little role among over time riders.
@@ -295,11 +301,11 @@ This gender difference was however not very obvious after about 40mins. Again we
 ```{r}
 # Distance
 bbike %>% 
-        filter(birth.year > 1900 & birth.year <= 2017)%>%
-        group_by(age_cat) %>% 
-        summarize(avg = mean(dist_km), se = sd(dist_km) / sqrt(n())) %>% 
+  filter(birth.year > 1900 & birth.year <= 2017)%>%
+  group_by(age_cat) %>% 
+  summarize(avg = mean(dist_km), se = sd(dist_km) / sqrt(n())) %>% 
   ggplot(aes(age_cat, avg))+ 
-  geom_errorbar(aes(ymin = avg - 2*se, ymax = avg+2 * se), width = 0.2)+
+  geom_errorbar(aes(ymin = avg - 2*se, ymax = avg+2 * se), width = 0.2, alpha = 0.5)+
   geom_point(color = "#FF8F1C")+
   geom_line(color = "#1D428A")+
   scale_x_continuous(breaks=(c(1,2,3,4,5,6,7,8)), 
@@ -321,44 +327,68 @@ Here there’s an initial upward trend we see with age and distance covered in k
 ```{r}
 # Keep only the subscribers in the dataset 
 bbikemember <- bbike %>%
-        ungroup() %>%
+  ungroup() %>%
   filter(usertype == "Subscriber" & duration_min < 75) %>%
-        mutate(gender = as.factor(gender), day = as.factor(day),
-               hour = as.factor(hour)) %>%
-        mutate(rain_cat = ifelse(rain == 0, 0, 1)) %>%
-        mutate(snownice_cat = ifelse(snownice == 0, 0, 1)) %>%
-        mutate(overtime = ifelse(duration_min < 15, 0, 1)) %>%
-        mutate(overtime = as.factor(overtime)) %>%
-        mutate(satsun = ifelse(wday %in% c("Sat", "Sun"), 1, 0)) %>%
-        mutate(satsun = as.factor(satsun)) %>%
-        filter(gender != 0)
+  mutate(gender = as.factor(gender), day = as.factor(day),
+         hour = as.factor(hour)) %>%
+  mutate(rain_cat = ifelse(rain == 0, 0, 1)) %>%
+  mutate(snownice_cat = ifelse(snownice == 0, 0, 1)) %>%
+  mutate(overtime = ifelse(duration_min < 15, 0, 1)) %>%
+  mutate(overtime = as.factor(overtime)) %>%
+  mutate(satsun = ifelse(wday %in% c("Sat", "Sun"), 1, 0)) %>%
+  mutate(satsun = as.factor(satsun)) %>%
+  filter(gender != 0)
 ```
+
 
 #### Decision tree
-```{r, warning = FALSE, message = FALSE, fig.width = 10}
-output_tree <- ctree(overtime ~ gender + factor(rain_cat) + factor(snownice_cat),
-                     data = bbikemember)
-plot(output_tree)
-```
-
 ```{r}
 output_tree1 <- ctree(overtime ~ gender + satsun,
                      data = bbikemember)
 plot(output_tree1)
 ```
 
+```{r, fig.width = 10}
+set.seed(6)
+s <- sample(1:nrow(bbikemember), 500000)
+
+dt_train = bbikemember[s,]
+dt_test = bbikemember[-s,]
+
+dtm = ctree(overtime ~ gender + factor(rain_cat) + factor(snownice_cat), data = dt_train)
+
+plot(dtm)
+
+dt_test$predClass = predict(dtm, newdata = dt_test, type = "response") 
+dt_test$predProb = sapply(predict(dtm, newdata = dt_test, type= "prob"),'[[',2) 
+
+dt_test$predClass2 = 0
+dt_test$predClass2[dt_test$predProb >= 0.3] = 1
+
+table(dt_test$predClass2, dt_test$overtime)
+```
+
+Based on the tree plot, we might roughly estimate that women tend to ride over 45 minutes during no rainy or snowy days. Both female and male are less likely to over-ride. 
+
+```{r, message = FALSE}
+roc_pred <- prediction(dt_test$predProb, dt_test$overtime)
+pf <- performance(roc_pred, "tpr", "fpr")
+plot(pf, col = "#FF8F1C")
+abline(0, 1, col="grey")
+
+# getting area under the curve
+performance(roc_pred,"auc")@y.values
+```
+
+However, after checking the performance of the tree model, we figured out that the model did not seem to predict well because the AUC is 0.5428584. To find more accurate model, we proceeded to the logistic regression by putting more predictors in our new model. 
 
 #### logistic regression
 ```{r, warning = FALSE}
 set.seed(1)
 
-library(caret)
-
-Train <- createDataPartition(bbikemember$overtime, p=0.5, list=FALSE)
+Train <- createDataPartition(bbikemember$overtime, p = 0.5, list = FALSE)
 training <- bbikemember[ Train, ]
 testing <- bbikemember[ -Train, ]
-
-bbikemember$overtime = as.factor(as.numeric(as.character(bbikemember $overtime)))
 
 #overall accuracy 
 p = 0.358  #290235/810623
@@ -399,8 +429,9 @@ predict <- predict(model, newdata=testing, type = "response")
 
 ROCRpred <- prediction(predict, testing$overtime)
 ROCRperf <- performance(ROCRpred, 'tpr','fpr')
-plot(ROCRperf, colorize = F, text.adj = c(-0.2,1.7))
+plot(ROCRperf, col = "#0050B5", text.adj = c(-0.2,1.7))
+abline(0, 1, col = "grey")
 ```
 
-In this logistic regression model, we put gender, age, weekend, rain, snow, the popularity of starting stations, and the popularity of ending stations in order to predict overtime riders. We created training dataset for building a model and testing dataset for check the performance of the model. Because of the big sample size, we got statistically higher or lower odds of over-riding in all of the covariates. However, if we look at the odds ratio, we could realize something interesting. The odds ratio of over-riding when it snowed is 0.54 (95% CI: 0.50 to 0.59) times the odds when it did not. The odds ratio of over-riding when it rained is 0.92 (95% CI: 0.91 to 0.93) times the odds when it did not. If it rains or snows, people tend to return bike on time. On the other hand, the odds ratio of over-riding on weekend is 1.28 (95% CI: 1.26 to 1.30) times the odds on weekday. The odds ratio of over-riding among females is 1.37 (95% CI: 1.35 to 1.39) times the odds among males. These data shows females tend to use Blue Bike longer than 45 minutes especially on weekend.
-Finally we drew the ROC curve using the testing dataset. AUC is 0.61, which means this model is not so good model to predict over-ride.
+In this logistic regression model, we put gender, age, weekends (versus weekdays), rain, snow, the popularity of starting stations, and the popularity of ending stations to predict overtime riders. We created training dataset for building a model and testing dataset for check the performance of the model. Because of the big sample size, we got statistically higher or lower odds of over-riding in all of the predictors. However, if we look at the odds ratio, we could realize something interesting. The odds of over-riding when it snowed is 0.54 (95% CI: 0.50 to 0.59) times the odds when it did not. The odds of over-riding when it rained is 0.92 (95% CI: 0.91 to 0.93) times the odds when it did not. If it rains or snows, people tend to return bike on time. On the other hand, the odds of over-riding on weekends is 1.28 (95% CI: 1.26 to 1.30) times the odds on weekdays. The odds of over-riding among females is 1.37 (95% CI: 1.35 to 1.39) times the odds among males. These data shows females tend to use the Bluebikes longer than 45 minutes especially during weekends.
+Finally we drew the ROC curve using the testing dataset. However, AUC is 0.61, which means this model is not so good model to predict over-ride.
