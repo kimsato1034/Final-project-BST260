@@ -59,6 +59,7 @@ plot %>%
 
 This graph shows that the number of Bluebike subscribers and customers had increased dramatically from 2011 to 2013 and has maintained the high number of riders until 2017.
 
+
 ```{r, echo = FALSE}
 bbike_summary %>%
   ggplot(aes(year, total_trips)) +
@@ -71,6 +72,7 @@ bbike_summary %>%
 ```
 
 This line chart shows the total number of the Bluebike trips, which could count multiple rides of one user. The number of trips also increased in the first part of the years as the number of users did. On the contrary to the number of riders, the trip counts have still increased in these few years.
+
 
 ### Objectives
 
@@ -184,6 +186,7 @@ bbike %>%
 
 In this bar chart, people with gender-code “0” were removed from the analysis. Age was stratified into bands of 10 years in width and shows as categorical variable for comparison. Main Blue Bike users are 20s or 30s, and male users are dominant in each generation.
 
+
 #### Trip distance
 ```{r}
 # Distance
@@ -205,6 +208,7 @@ bbike %>%
 
 Here there’s an initial upward trend we see with age and distance covered in kilometers. As age increased from the teens to about age 50, the distance covered also increased. This positive linear relationship was at age 50, after which we began to see a decline. Interestingly, there was another upward trend after age 80.
 
+
 #### Blue bike Stations
 ```{r}
 # Create data frame
@@ -216,7 +220,7 @@ filter(!birth.year=="\\N")%>%
 summary(dat_2017_station)
 ```
 
-#### Mapping about number of users at each station 
+#### Popularity of Bluebikes stations in 2017
 ```{r}
 # Distinguish stations by color based on the number of users
 getColor <- function(df){
@@ -244,7 +248,8 @@ leaflet(dat_2017_station) %>% addTiles() %>%
 , ~start.station.latitude, icon=icons, label=~as.character(number), popup = ~start.station.name)
 ```
 
-This map classified Blue Bike stations into three categories based on the number of trips in 2017: Red stations are most popular, orange stations are moderate and green stations are least popular. The most popular station was “MIT at Mass Ave / Amherst St”, at the number of trips 35,700 per year. The least popular station was “Four Corners – 157 Washington St”, at the number of trips just four per year.
+This map classified Blue Bike stations into three categories based on the number of trips in 2017: the red dots represent Bluebike stations that were used the most, and the green dots represent the stations used the least. The most popular station was “MIT at Mass Ave / Amherst St”, at the number of trips 35,700 per year. The least popular station was “Four Corners - 157 Washington St”, at the number of trips just four per year. 
+
 
 #### Number of trips in each hour within a day through Sunday to Saturday
 ```{r}
@@ -258,7 +263,8 @@ bbike %>% ggplot(aes(hour))+
   theme_fivethirtyeight()
 ```
 
-These bar graphs show the number of trips in each hour within a day through Sunday to Saturday. We can see biphasic trend of 8 am and 5 pm on weekday, which are consistent with commute time. On the other hand, we could see a completely different trend on weekend.
+These bar graphs show the number of trips in each hour within a day through Sunday to Saturday. During weekdays, the usage of Bluebike peaked during commute hours (7-9am and 4-6pm).During weekends, the distribution is more like a bell curve, with peak times between 12pm and 4pm
+
 
 ```{r, fig.width = 7}
 bbike %>% 
@@ -275,7 +281,8 @@ bbike %>%
   theme_economist_white()
 ```
 
-The figure shows seasonal comparison of users throughout a year. As expected, we see small number of trips in winter.
+The figure shows seasonal comparison of users throughout a year. Hint! It's Boston! As expected, the amount of rides decreased dramatically from January to March. Men used Bluebikes much frequently across hours and months.
+
 
 #### Distribution of Trip Duration
 ```{r}
@@ -287,6 +294,7 @@ bbike_member <- bbike %>%
 summary(bbike_member$duration_min)
 ```
 As you can see, the data seems to have wrong information. The very long tripduration might be attributable to lost or other errors. Therefore, we limit the range from 0 to 75 minutes for the duration in this study.
+
 
 ```{r}
 bbike_member <- bbike_member %>%
@@ -303,8 +311,8 @@ scale_fill_discrete("Rain", labels = c("No rain", "Rain")) +
 ```
 
 Since the maximum trip duration 61276.80 minutes, we decided to cap our analysis at 75mins. As a bike-leasing organization, a very long trip duration might probably be due to a missing bike or some unknown reason.
-
 Unsurprisingly, we see that many riders use the bikes when the weather is more conducive. The number of blue-bike users when it is not raining is more than double the number of people who use the bikes in the rain. 
+
 
 ```{r, warning = FALSE}
 bbike_member %>%
@@ -328,6 +336,7 @@ This gender difference was however not very obvious after about 40mins. Again we
 * We applied 'Machine Learning' by using logistic regression to predict overtime users characteristics 
 * Rationale: With an annual membership, users can ride unlimited bike ride for up to 45 mins. Additional $2.5 will be charged per 30 mins for members. In this analysis, we are interested in learning about the characteristics of overtime riders so that Bluebike can gain extra revenue. 
 
+
 ```{r}
 # Keep only the subscribers in the dataset 
 bbikemember <- bbike %>%
@@ -343,6 +352,7 @@ bbikemember <- bbike %>%
   mutate(satsun = as.factor(satsun)) %>%
   filter(gender != 0)
 ```
+Given Bluebike only collects information on subscribers and there is no User ID available in the dataset, we would like to know the characteristics and conditions for overtime users, as overtime users would provide additional revenue to Bluebike.
 
 
 #### Decision tree
@@ -351,6 +361,9 @@ output_tree1 <- ctree(overtime ~ gender + satsun,
                      data = bbikemember)
 plot(output_tree1)
 ```
+
+The decision tree analysis shows us that when the rider is female and the riding time is over the weekend, the subscriber tends to ride overtime. When the rider is male and the riding time is over weekdays, the subscriber has the least probability to ride overtime. 
+
 
 ```{r, fig.width = 10}
 set.seed(6)
@@ -372,7 +385,8 @@ dt_test$predClass2[dt_test$predProb >= 0.3] = 1
 table(dt_test$predClass2, dt_test$overtime)
 ```
 
-Based on the tree plot, we might roughly estimate that women tend to ride over 45 minutes during no rainy or snowy days. Both female and male are less likely to over-ride. 
+The decision tree analysis shows us that when the rider is female and there is no rain, the subscriber tends to ride overtime. When the rider is male and there is both rain and snow, the subscriber has the least probability to ride overtime. 
+
 
 ```{r, message = FALSE}
 roc_pred <- prediction(dt_test$predProb, dt_test$overtime)
@@ -385,6 +399,7 @@ performance(roc_pred,"auc")@y.values
 ```
 
 However, after checking the performance of the tree model, we figured out that the model did not seem to predict well because the AUC is 0.5428584. To find more accurate model, we proceeded to the logistic regression by putting more predictors in our new model. 
+
 
 #### logistic regression
 ```{r, warning = FALSE}
@@ -437,8 +452,10 @@ plot(ROCRperf, col = "#FF8F1C", text.adj = c(-0.2,1.7))
 abline(0, 1, col = "grey")
 ```
 
-In this logistic regression model, we put gender, age, weekends (versus weekdays), rain, snow, the popularity of starting stations, and the popularity of ending stations to predict overtime riders. We created training dataset for building a model and testing dataset for check the performance of the model. Because of the big sample size, we got statistically higher or lower odds of over-riding in all of the predictors. However, if we look at the odds ratio, we could realize something interesting. The odds of over-riding when it snowed is 0.54 (95% CI: 0.50 to 0.59) times the odds when it did not. The odds of over-riding when it rained is 0.92 (95% CI: 0.91 to 0.93) times the odds when it did not. If it rains or snows, people tend to return bike on time. On the other hand, the odds of over-riding on weekends is 1.28 (95% CI: 1.26 to 1.30) times the odds on weekdays. The odds of over-riding among females is 1.37 (95% CI: 1.35 to 1.39) times the odds among males. These data shows females tend to use the Bluebikes longer than 45 minutes especially during weekends.
-Finally we drew the ROC curve using the testing dataset. However, AUC is 0.61, which means this model might be better than our previous model but still not so good for predicting over-ride.
+In this logistic regression model, we put gender, age, weekends (versus weekdays), rain, snow, the popularity of starting stations, and the popularity of ending stations to predict overtime riders. We created training dataset for building a model and testing dataset for check the performance of the model. Because of the big sample size, we got statistically higher or lower odds of over-riding in all of the predictors. However, if we look at the odds ratio, we could realize something interesting. The odds of over-riding when it snowed is 0.54 (95% CI: 0.50 to 0.59) times the odds when it did not. The odds of over-riding when it rained is 0.92 (95% CI: 0.91 to 0.93) times the odds when it did not. If it rains or snows, people tend to return bike on time. On the other hand, the odds of over-riding on weekends is 1.28 (95% CI: 1.26 to 1.30) times the odds on weekdays. The odds of over-riding among females is 1.37 (95% CI: 1.35 to 1.39) times the odds among males.
+The logistic regression shows similar result, as when it snows or rains, users tend to return bike on time. Similarly, females tend to use the Bluebikes longer than 45 minutes especially during weekends. 
+Finally we drew the ROC curve using the testing dataset. However, AUC is 0.61, which means this model might be better than our previous model but still not so good in terms of predicting over-ride.
+
 
 ### Reference
 * [Bluebikes](https://www.bluebikes.com)
