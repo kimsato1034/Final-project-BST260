@@ -17,4 +17,4 @@ We used the datasets below for our project:
 201712-hubway-tripdata.csv,
 Hubway_Stations_as_of_July_2017.csv,
 bluebike_summary.xlsx,
-boston_weather.xlx
+boston_weather.xls
