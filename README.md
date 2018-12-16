@@ -2,7 +2,7 @@
 
 This is a final project for Introduction to Data Science (BST260)
 
-We used the datasets below for our project: 
+We used the datasets in this repository for our project: 
 201701-hubway-tripdata.csv,
 201702-hubway-tripdata.csv,
 201703-hubway-tripdata.csv,
